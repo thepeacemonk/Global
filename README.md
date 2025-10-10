@@ -14,6 +14,6 @@
 </h2>
 
 
-### Credits 
+# Credits 
 
 Weather data provided by [`Open-Mateo.com`](https://open-meteo.com/en/docs) – licensed under CC BY 4.0.
