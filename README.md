@@ -11,5 +11,3 @@
 ### Credits 
 
 Weather data provided by [`Open-Mateo.com`](https://open-meteo.com/en/docs) – licensed under CC BY 4.0.
-
-Zippenfenig, P. (2023). Open-Meteo.com Weather API [Computer software]. Zenodo. https://doi.org/10.5281/ZENODO.7970649
