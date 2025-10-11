@@ -8,7 +8,7 @@
   Globe is a add-on for Anki that displays a widget with your current temperature and forecast through OpenMateo 
 </h4>
 
-# Preview 
+## Preview 
 <h2 align="center">
 <img width="80%" height="auto" alt="Global preview" src="https://github.com/user-attachments/assets/b3a83f75-2814-46fa-bb0a-24dc2c6b550c" />
 </h2>
