@@ -1,7 +1,9 @@
 {
-  "name": "Global",
+  "name": "Global (by Peace)",
+  "package": "519723565",
+  "ankiweb_id": "519723565",
   "author": "PeaceMonk",
-  "version": "V.1.0.0-beta",
+  "version": "v.2.0-bento",
   "homepage": "",
   "conflicts": []
 }

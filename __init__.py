@@ -14,6 +14,7 @@ import time
 from urllib.parse import urlparse, parse_qs
 import os
 import base64
+import colorsys
 
 # Import gui_hooks for modern Anki versions
 from aqt import mw, gui_hooks
@@ -22,6 +23,7 @@ from aqt.utils import showInfo, tooltip
 import aqt.deckbrowser
 
 from .settings import SettingsDialog
+from . import bento_integration
 
 # --- Configuration ---
 ADDON_NAME = "Global"
@@ -33,15 +35,27 @@ try:
         raise TypeError("Config is not a dictionary.")
 except (TypeError, json.JSONDecodeError):
     CONFIG = {
-        "view_mode": "vertical",
+        "view_mode": "mini",
         "units": "metric", # metric (celsius) or imperial (fahrenheit)
         "use_custom_url": False,
         "custom_api_url": "",
         "last_weather_data": None,
         "last_fetch_time": 0,
         "enable_gradients": True,
-        "card_opacity": 1.0
+        "card_opacity": 1.0,
+        "colors": {
+            "light": {"card_background": "#FFFFFF"},
+            "dark": {"card_background": "#2C2F33"},
+        },
+        "manual_widget_width": 211,
+        "manual_widget_height": 300
     }
+    mw.addonManager.writeConfig(__name__, CONFIG)
+
+# Vertical was retired in favor of Mini and Pro. Normalize saved settings so
+# existing users see one of the two available choices immediately.
+if CONFIG.get("view_mode") == "vertical":
+    CONFIG["view_mode"] = "mini"
     mw.addonManager.writeConfig(__name__, CONFIG)
 
 
@@ -269,9 +283,11 @@ def hex_to_rgba(hex_code, alpha):
     return f"rgba({r}, {g}, {b}, {alpha})"
 
 # --- HTML & CSS Generation ---
-def generate_css(is_dark):
+def generate_css(is_dark, config=None):
     """Generates the complete CSS for the add-on."""
-    opacity = CONFIG.get("card_opacity", 1.0)
+    if config is None:
+        config = CONFIG
+    opacity = config.get("card_opacity", 1.0)
     
     # Define colors
     if is_dark:
@@ -286,41 +302,93 @@ def generate_css(is_dark):
         card_bg_2_solid = hex_to_rgba("#FFFFFF", opacity)
 
     # Override card 1 background if gradients are disabled
-    if not CONFIG.get("enable_gradients", True):
-        if is_dark:
-            card_bg_1_solid = f"rgba(44, 47, 51, {opacity})"
-        else:
-            # The user requested #FFFFFF for light mode
-            card_bg_1_solid = f"rgba(255, 255, 255, {opacity})"
+    if not config.get("enable_gradients", True):
+        theme_key = "dark" if is_dark else "light"
+        default_flat = "#2C2F33" if is_dark else "#FFFFFF"
+        flat_hex = config.get("colors", {}).get(theme_key, {}).get("card_background", default_flat)
+        card_bg_1_solid = hex_to_rgba(flat_hex, opacity)
 
-    # Define gradients
-    gradients = {
+    # Define gradients (raw hex stops, so we can also derive a readable
+    # on-gradient text/icon color per gradient below)
+    gradient_stops = {
         "light": {
-            "sunny-morning":   f"linear-gradient(135deg, {hex_to_rgba('#f5e3e6', opacity)}, {hex_to_rgba('#fde4a0', opacity)}, {hex_to_rgba('#c8e7e9', opacity)})",
-            "sunny-afternoon": f"linear-gradient(135deg, {hex_to_rgba('#d4e7ff', opacity)}, {hex_to_rgba('#a8caff', opacity)}, {hex_to_rgba('#89acff', opacity)})",
-            "evening":         f"linear-gradient(135deg, {hex_to_rgba('#ff7e5f', opacity)}, {hex_to_rgba('#feb47b', opacity)}, {hex_to_rgba('#ffcc70', opacity)})",
-            "rainy":           f"linear-gradient(135deg, {hex_to_rgba('#a7b3be', opacity)}, {hex_to_rgba('#c0c8d1', opacity)}, {hex_to_rgba('#b4c2d1', opacity)})",
-            "cloudy":          f"linear-gradient(135deg, {hex_to_rgba('#C9DEF4', opacity)}, {hex_to_rgba('#F5CCD4', opacity)}, {hex_to_rgba('#B8A4C9', opacity)})",
-            "snowy":           f"linear-gradient(135deg, {hex_to_rgba('#e7eff9', opacity)}, {hex_to_rgba('#f8f1f8', opacity)}, {hex_to_rgba('#ffffff', opacity)})",
-            "stormy":          f"linear-gradient(135deg, {hex_to_rgba('#536976', opacity)}, {hex_to_rgba('#292E49', opacity)}, {hex_to_rgba('#536976', opacity)})",
-            "sunny-night":     f"linear-gradient(135deg, {hex_to_rgba('#667eea', opacity)}, {hex_to_rgba('#764ba2', opacity)}, {hex_to_rgba('#6B8DD6', opacity)})",
+            "sunny-morning":   ['#f5e3e6', '#fde4a0', '#c8e7e9'],
+            "sunny-afternoon": ['#d4e7ff', '#a8caff', '#89acff'],
+            "evening":         ['#ff7e5f', '#feb47b', '#ffcc70'],
+            "rainy":           ['#a7b3be', '#c0c8d1', '#b4c2d1'],
+            "cloudy":          ['#C9DEF4', '#F5CCD4', '#B8A4C9'],
+            "snowy":           ['#e7eff9', '#f8f1f8', '#ffffff'],
+            "stormy":          ['#536976', '#292E49', '#536976'],
+            "sunny-night":     ['#667eea', '#764ba2', '#6B8DD6'],
         },
         "dark": {
-            "sunny-morning":   f"linear-gradient(135deg, {hex_to_rgba('#4F4343', opacity)}, {hex_to_rgba('#7D5E5E', opacity)}, {hex_to_rgba('#9C8383', opacity)})",
-            "sunny-afternoon": f"linear-gradient(135deg, {hex_to_rgba('#1e3c72', opacity)}, {hex_to_rgba('#2a5298', opacity)}, {hex_to_rgba('#4a6da7', opacity)})",
-            "evening":         f"linear-gradient(135deg, {hex_to_rgba('#EF709B', opacity)}, {hex_to_rgba('#F5BD82', opacity)}, {hex_to_rgba('#FA9372', opacity)})",
-            "rainy":           f"linear-gradient(135deg, {hex_to_rgba('#37474f', opacity)}, {hex_to_rgba('#263238', opacity)}, {hex_to_rgba('#4f5a63', opacity)})",
-            "cloudy":          f"linear-gradient(135deg, {hex_to_rgba('#455A64', opacity)}, {hex_to_rgba('#607D8B', opacity)}, {hex_to_rgba('#546E7A', opacity)})",
-            "snowy":           f"linear-gradient(135deg, {hex_to_rgba('#485461', opacity)}, {hex_to_rgba('#28313b', opacity)}, {hex_to_rgba('#485461', opacity)})",
-            "stormy":          f"linear-gradient(135deg, {hex_to_rgba('#1F1C2C', opacity)}, {hex_to_rgba('#3A355A', opacity)}, {hex_to_rgba('#1F1C2C', opacity)})",
-            "sunny-night":     f"linear-gradient(135deg, {hex_to_rgba('#0f2027', opacity)}, {hex_to_rgba('#203a43', opacity)}, {hex_to_rgba('#2c5364', opacity)})",
+            "sunny-morning":   ['#4F4343', '#7D5E5E', '#9C8383'],
+            "sunny-afternoon": ['#1e3c72', '#2a5298', '#4a6da7'],
+            "evening":         ['#EF709B', '#F5BD82', '#FA9372'],
+            "rainy":           ['#37474f', '#263238', '#4f5a63'],
+            "cloudy":          ['#455A64', '#607D8B', '#546E7A'],
+            "snowy":           ['#485461', '#28313b', '#485461'],
+            "stormy":          ['#1F1C2C', '#3A355A', '#1F1C2C'],
+            "sunny-night":     ['#0f2027', '#203a43', '#2c5364'],
         }
     }
     theme = "dark" if is_dark else "light"
 
+    def _hex_to_rgb01(hex_code):
+        hex_code = hex_code.lstrip('#')
+        r, g, b = tuple(int(hex_code[i:i + 2], 16) for i in (0, 2, 4))
+        return r / 255.0, g / 255.0, b / 255.0
+
+    def _gradient_ink_colors(stops):
+        """Derive a text/icon color that keeps the gradient's own hue (so it
+        visually matches that gradient) instead of falling back to plain
+        black/white, while still pushing lightness/saturation far enough
+        for the text to stay readable against the gradient."""
+        rgbs = [_hex_to_rgb01(c) for c in stops]
+        r = sum(c[0] for c in rgbs) / len(rgbs)
+        g = sum(c[1] for c in rgbs) / len(rgbs)
+        b = sum(c[2] for c in rgbs) / len(rgbs)
+        h, l, s = colorsys.rgb_to_hls(r, g, b)
+        luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        if luminance > 0.55:
+            # Light gradient: a deep, saturated shade of its own hue reads
+            # as "colored ink", not just black.
+            text_l, text_s = 0.22, min(1.0, s + 0.35)
+            icon_l, icon_s = 0.28, min(1.0, s + 0.3)
+        else:
+            # Dark gradient: a pale, softly-tinted shade of its own hue
+            # instead of plain white.
+            text_l, text_s = 0.92, min(1.0, s * 0.6 + 0.2)
+            icon_l, icon_s = 0.88, min(1.0, s * 0.6 + 0.25)
+        tr, tg, tb = colorsys.hls_to_rgb(h, text_l, text_s)
+        ir, ig, ib = colorsys.hls_to_rgb(h, icon_l, icon_s)
+        text_hex = f"#{int(tr * 255):02x}{int(tg * 255):02x}{int(tb * 255):02x}"
+        icon_hex = f"#{int(ir * 255):02x}{int(ig * 255):02x}{int(ib * 255):02x}"
+        muted_rgba = f"rgba({int(tr * 255)}, {int(tg * 255)}, {int(tb * 255)}, 0.75)"
+        return text_hex, muted_rgba, icon_hex
+
     gradient_rules = ""
-    for name, value in gradients[theme].items():
-        gradient_rules += f"        #global-container .global-card-1.global-gradient-{name} {{ background: {value} !important; }}\n"
+    for name, stops in gradient_stops[theme].items():
+        gradient_css = f"linear-gradient(135deg, {', '.join(hex_to_rgba(c, opacity) for c in stops)})"
+
+        # Pick text/icon colors that read clearly against this specific
+        # gradient's own colors, instead of inheriting the theme's fixed
+        # text color (which can be unreadable on e.g. the dark "stormy"
+        # gradient in light mode, or vice versa) — and tinted with the
+        # gradient's own hue rather than plain black/white.
+        on_text, on_muted, on_icon = _gradient_ink_colors(stops)
+
+        # The base "color" rule above is scoped to
+        # `#global-container #global-weather-wrapper` (two ID selectors), which
+        # outranks a plain `.global-card-1.global-gradient-*` override on
+        # specificity even with !important on both sides — so this one needs
+        # the same #global-weather-wrapper prefix to actually win.
+        gradient_rules += f"""
+        #global-container .global-card-1.global-gradient-{name} {{ background: {gradient_css} !important; }}
+        #global-container #global-weather-wrapper .global-card-1.global-gradient-{name} {{ color: {on_text} !important; }}
+        #global-container .global-card-1.global-gradient-{name} .global-text-muted {{ color: {on_muted} !important; }}
+        #global-container .global-card-1.global-gradient-{name} .weather-icon {{ color: {on_icon} !important; }}
+        """
 
     base_styles = f"""
         #global-container #global-weather-wrapper {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: {text_color} !important; margin: 20px auto; }}
@@ -341,7 +409,7 @@ def generate_css(is_dark):
         #global-container .global-icon-large .weather-icon, #global-container .global-icon-large .weather-icon svg {{ width: 64px; height: 64px; }}
     """
     
-    view_mode = CONFIG.get("view_mode", "vertical")
+    view_mode = config.get("view_mode", "vertical")
     view_styles = ""
     if view_mode == "vertical":
         view_styles = """
@@ -385,22 +453,123 @@ def generate_css(is_dark):
             #global-container.night_mode .global-mini-snowy {{ background-color: #2F4220 !important; color: #C8E6C9 !important; }}
             #global-container.night_mode .global-mini-stormy {{ background-color: #282A4D !important; color: #C5CAE9 !important; }}
             #global-container.night_mode .global-mini-cloudy {{ background-color: #424242 !important; color: #E0E0E0 !important; }}
+            /* The gradient-card rules above set a general on-gradient icon
+               color with the same specificity as these pill-specific ones;
+               since these come later in the generated CSS they'd win a tie
+               anyway, but re-declaring the icon color explicitly here makes
+               that not depend on source order. */
+            #global-container .global-mini-info-bar.global-mini-sunny .weather-icon {{ color: #725a03 !important; }}
+            #global-container .global-mini-info-bar.global-mini-rainy .weather-icon {{ color: #0d47a1 !important; }}
+            #global-container .global-mini-info-bar.global-mini-snowy .weather-icon {{ color: #1b5e20 !important; }}
+            #global-container .global-mini-info-bar.global-mini-stormy .weather-icon {{ color: #1a237e !important; }}
+            #global-container .global-mini-info-bar.global-mini-cloudy .weather-icon {{ color: #212121 !important; }}
+            #global-container.night_mode .global-mini-info-bar.global-mini-sunny .weather-icon {{ color: #FDE68A !important; }}
+            #global-container.night_mode .global-mini-info-bar.global-mini-rainy .weather-icon {{ color: #90CAF9 !important; }}
+            #global-container.night_mode .global-mini-info-bar.global-mini-snowy .weather-icon {{ color: #C8E6C9 !important; }}
+            #global-container.night_mode .global-mini-info-bar.global-mini-stormy .weather-icon {{ color: #C5CAE9 !important; }}
+            #global-container.night_mode .global-mini-info-bar.global-mini-cloudy .weather-icon {{ color: #E0E0E0 !important; }}
          """
     return base_styles + gradient_rules + view_styles
 
-def generate_html(weather_data):
-    """Generates the appropriate HTML block based on the selected view mode."""
-    view_mode = CONFIG.get("view_mode", "vertical")
-    
+def generate_onigiri_fill_css():
+    """Overrides compact weather layouts when Global is placed in Onigiri's grid."""
+    radius = bento_integration.onigiri_widget_radius()
+    radius_value = f"var(--onigiri-box-effect-radius, {radius}px)"
+    return f"""
+        .external-widget-container #global-container,
+        .onigiri-external-overview-addon #global-container {{
+            width: 100% !important;
+            height: 100% !important;
+            max-width: none !important;
+            max-height: none !important;
+            min-width: 0 !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            display: flex !important;
+            box-sizing: border-box !important;
+            border-radius: {radius_value} !important;
+            overflow: hidden !important;
+        }}
+        .external-widget-container #global-container #global-weather-wrapper,
+        .onigiri-external-overview-addon #global-container #global-weather-wrapper {{
+            width: 100% !important;
+            height: 100% !important;
+            max-width: none !important;
+            max-height: none !important;
+            min-width: 0 !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            flex: 1 1 auto !important;
+            box-sizing: border-box !important;
+            align-items: stretch !important;
+            border-radius: inherit !important;
+        }}
+        .external-widget-container #global-container .global-horizontal-left,
+        .external-widget-container #global-container .global-horizontal-right,
+        .external-widget-container #global-container .global-card,
+        .onigiri-external-overview-addon #global-container .global-horizontal-left,
+        .onigiri-external-overview-addon #global-container .global-horizontal-right,
+        .onigiri-external-overview-addon #global-container .global-card {{
+            min-width: 0 !important;
+            min-height: 0 !important;
+            box-sizing: border-box !important;
+        }}
+        .external-widget-container #global-container .global-card,
+        .onigiri-external-overview-addon #global-container .global-card {{
+            border-radius: {radius_value} !important;
+        }}
+        .external-widget-container #global-container #global-weather-wrapper > .global-card,
+        .onigiri-external-overview-addon #global-container #global-weather-wrapper > .global-card {{
+            width: 100% !important;
+            justify-self: stretch !important;
+            align-self: stretch !important;
+        }}
+        .external-widget-container #global-container .global-horizontal-left,
+        .onigiri-external-overview-addon #global-container .global-horizontal-left {{
+            display: flex !important;
+            height: 100% !important;
+        }}
+        .external-widget-container #global-container .global-horizontal-left > .global-card,
+        .onigiri-external-overview-addon #global-container .global-horizontal-left > .global-card {{
+            width: 100% !important;
+            height: 100% !important;
+            flex: 1 1 auto !important;
+        }}
+        .external-widget-container #global-container .global-horizontal-right,
+        .onigiri-external-overview-addon #global-container .global-horizontal-right {{
+            height: 100% !important;
+            align-content: stretch !important;
+            grid-auto-rows: minmax(0, 1fr) !important;
+        }}
+        .external-widget-container #global-container .global-mini-card,
+        .onigiri-external-overview-addon #global-container .global-mini-card {{
+            width: 100% !important;
+            height: 100% !important;
+        }}
+    """
+
+def generate_html(weather_data, config=None, compact=False):
+    """Generates the appropriate HTML block based on the selected view mode.
+
+    `compact` trims the vertical layout's hourly forecast so it fits within
+    Onigiri's fixed-height grid rows (a 4-row cell is too short for the full
+    4-item forecast at the grid's default row height). It only affects the
+    real widget render, not the settings-dialog preview, which always shows
+    the full layout regardless of grid constraints.
+    """
+    if config is None:
+        config = CONFIG
+    view_mode = config.get("view_mode", "vertical")
+
     if not weather_data or "forecast" not in weather_data or "current" not in weather_data["forecast"]:
         return "<div class='global-text-center'>Could not parse weather data. If using a custom URL, ensure it includes 'current', 'hourly', and 'daily' parameters.</div>"
-    
+
     # --- Data Extraction ---
     forecast = weather_data["forecast"]
     current = forecast["current"]; daily = forecast["daily"]; hourly = forecast["hourly"]
-    
+
     # --- Dynamic Class Names ---
-    gradient_class = get_gradient_class(current['weather_code'], current['is_day']) if CONFIG.get("enable_gradients", True) else ""
+    gradient_class = get_gradient_class(current['weather_code'], current['is_day']) if config.get("enable_gradients", True) else ""
     
     # --- AQI and Humidity ---
     current_aqi = None
@@ -420,7 +589,8 @@ def generate_html(weather_data):
         hourly_html = ""
         now_dt = datetime.now()
         start_idx = next((i for i, t in enumerate(hourly['time']) if datetime.fromisoformat(t) > now_dt), 0)
-        for i in range(start_idx, min(start_idx + 4, len(hourly['time']))):
+        hourly_count = 2 if compact else 4
+        for i in range(start_idx, min(start_idx + hourly_count, len(hourly['time']))):
             hour_dt = datetime.fromisoformat(hourly['time'][i])
             hourly_html += f"""<div>
                 <div class="vert-hourly-icon">{get_icon(hourly['weather_code'][i], 7 <= hour_dt.hour < 19)}</div>
@@ -529,10 +699,18 @@ def add_weather_to_deck_browser(deck_browser: aqt.deckbrowser.DeckBrowser, conte
     
     if cached_weather_html is None:
         weather_data = get_weather_data()
-        html_content = generate_html(weather_data)
+        html_content = generate_html(weather_data, compact=bento_integration.is_onigiri_detected())
         css = generate_css(mw.pm.night_mode())
         wrapper_class = "night_mode" if mw.pm.night_mode() else ""
-        cached_weather_html = f"<div id='global-container' class='{wrapper_class}'><style>{css}</style><div id='global-weather-wrapper'>{html_content}</div></div>"
+        sizing_css = bento_integration.sizing_css(
+            "#global-container",
+            "#global-container #global-weather-wrapper",
+            CONFIG,
+            default_width=211,
+            default_height=300,
+        )
+        onigiri_css = generate_onigiri_fill_css()
+        cached_weather_html = f"<div id='global-container' class='{wrapper_class}'><style>{css}{sizing_css}{onigiri_css}</style><div id='global-weather-wrapper'>{html_content}</div></div>"
 
     content.stats += cached_weather_html
 
@@ -547,6 +725,22 @@ def on_theme_change():
     if mw.state == "deckBrowser":
         mw.deckBrowser.refresh()
 
+
+
+_is_settings_open = False
+def debounce_settings(func):
+    def wrapper(*args, **kwargs):
+        global _is_settings_open
+        if _is_settings_open:
+            return
+        _is_settings_open = True
+        try:
+            return func()
+        finally:
+            _is_settings_open = False
+    return wrapper
+
+@debounce_settings
 def show_settings():
     dialog = SettingsDialog(mw, config=CONFIG, addon_name=__name__)
     dialog.exec()
@@ -558,7 +752,5 @@ gui_hooks.reviewer_will_end.append(reset_weather_cache)
 gui_hooks.sync_did_finish.append(reset_weather_cache)
 gui_hooks.theme_did_change.append(on_theme_change)
 
-action = QAction("Global Settings", mw)
-action.triggered.connect(show_settings)
-mw.form.menuTools.addAction(action)
-
+bento_integration.register_widget("Global", settings_callback=show_settings)
+bento_integration.add_menu_action("Global Settings", show_settings)

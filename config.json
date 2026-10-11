@@ -1,7 +1,9 @@
 {
     "api_key": "",
-    "view_mode": "vertical",
+    "view_mode": "mini",
     "units": "metric",
     "last_weather_data": null,
-    "last_fetch_time": 0
+    "last_fetch_time": 0,
+    "manual_widget_width": 211,
+    "manual_widget_height": 300
 }
