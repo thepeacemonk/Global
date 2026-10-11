@@ -1,25 +1,26 @@
-<h2 align="center">
-   <img width="360" height="112" alt="Global" src="https://github.com/user-attachments/assets/57aae2a6-cb40-4438-b371-82e37b7d9a6f" />
-  <br>
-	Global
-</h2>
+<p align="center">
+  <img src=".github/global_slider.svg" alt="header" width="100%">
+</p>
 
-<h4 align="center">
-  Global is a add-on for Anki that displays a widget with your current temperature and forecast through OpenMateo 
-</h4>
+### License
 
-## Preview 
-<h2 align="center">
-<img width="80%" height="auto" alt="Global preview" src="https://github.com/user-attachments/assets/b3a83f75-2814-46fa-bb0a-24dc2c6b550c" />
-</h2>
+This project is licensed under the `GNU Affero General Public License v3.0 (AGPL-3.0)`. In short: you’re free to use, study, and modify this code—but if you run it as a service or distribute modified versions, you must make your source available under the same license.
+
+I’ve put a lot of time into designing and maintaining this work. Please respect the license and my effort:
+- Don’t copy parts of this project into closed-source or commercial products.
+- If you build on it, credit the original and keep your changes open.
+- If you find value here, consider contributing back or supporting the project.
+
 
 ### Support my work
 
 I’m actively shipping updates and new features. If my add-ons helped your studies or workflow, consider supporting my work. Your contribution keeps the project maintained and free for everyone.
 
+<p align="center">
 <a href="https://www.buymeacoffee.com/peacemonk">
-	<img width="35%" height="auto" alt="Global button" src="https://github.com/user-attachments/assets/85a989be-3f72-4a0b-b961-d078264439e4" />
+  <img src=".github/donation_button.svg" alt="Hours donation button" width="50%">
 </a>
+</p>
 
 # Credits 
 
